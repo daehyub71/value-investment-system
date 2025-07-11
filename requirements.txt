@@ -5,8 +5,7 @@ plotly>=5.15.0
 requests>=2.31.0
 beautifulsoup4>=4.12.0
 TA-Lib>=0.4.25
-FinanceDataReader>=0.9.50
-sqlite3
+FinanceDataReader  # Removed version constraint for compatibility
 python-dotenv>=1.0.0
 openpyxl>=3.1.0
 scikit-learn>=1.3.0
