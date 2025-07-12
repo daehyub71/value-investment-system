@@ -22,7 +22,9 @@ import sqlite3
 import time
 from datetime import datetime, timedelta
 import logging
-from config import get_db_connection
+#from config import get_dart_config, get_db_connection
+from config import get_dart_config
+from config.database_config import get_db_connection
 
 # 로깅 설정
 logging.basicConfig(
@@ -173,3 +175,4 @@ if __name__ == "__main__":
     success = main()
     if not success:
         sys.exit(1)
+

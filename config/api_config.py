@@ -23,7 +23,7 @@ class APIConfig:
         """DART API 설정 로드"""
         return {
             'api_key': os.getenv('DART_API_KEY', '').strip('"'),
-            'base_url': 'https://opendart.fss.or.kr/api/',
+            'base_url': 'https://opendart.fss.or.kr/api',
             'endpoints': {
                 'corp_code': 'corpCode.xml',
                 'financial_stmt': 'fnlttSinglAcntAll.json',
