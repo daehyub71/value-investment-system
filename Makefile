@@ -39,6 +39,24 @@ collect-data:
 	python scripts/data_collection/collect_stock_data.py
 	python scripts/data_collection/collect_news_data.py
 
+# 실시간 데이터 수집 (KIS API)
+collect-realtime-kis:
+	python scripts/data_collection/collect_kis_data.py --market_indicators
+	python scripts/data_collection/collect_kis_data.py --all_stocks --limit=30
+
+# 실시간 데이터 수집 (FinanceDataReader 대안)
+collect-realtime:
+	python scripts/data_collection/collect_alternative_realtime.py --market_indicators
+	python scripts/data_collection/collect_alternative_realtime.py --all_stocks --limit=30
+
+# 시장 지표만 수집
+collect-market:
+	python scripts/data_collection/collect_alternative_realtime.py --market_indicators
+
+# 상위 종목 실시간 데이터 수집
+collect-top-stocks:
+	python scripts/data_collection/collect_alternative_realtime.py --all_stocks --limit=50
+
 # 분석 실행
 analyze:
 	python scripts/analysis/run_buffett_analysis.py

@@ -223,12 +223,12 @@ class DartDataCollector:
             
             # 재무제표 저장
             if financial_data is not None and not financial_data.empty:
-                financial_data.to_sql('financial_statements', conn, if_exists='append', index=False, method='ignore')
+                financial_data.to_sql('financial_statements', conn, if_exists='append', index=False)
                 self.logger.info(f"재무제표 저장 완료: {len(financial_data)}건")
             
             # 공시정보 저장
             if disclosure_data is not None and not disclosure_data.empty:
-                disclosure_data.to_sql('disclosures', conn, if_exists='append', index=False, method='ignore')
+                disclosure_data.to_sql('disclosures', conn, if_exists='append', index=False)
                 self.logger.info(f"공시정보 저장 완료: {len(disclosure_data)}건")
             
             conn.commit()
@@ -308,45 +308,90 @@ class DartDataCollector:
             self.logger.error(f"재무데이터 수집 실패: {e}")
             return False
     
-    def collect_disclosure_data(self, corp_code=None, days=30):
-        """공시정보 수집"""
+    def collect_disclosure_data(self, corp_code=None, days=90):
+        """공시정보 수집 (company_info 테이블 기반 전체 종목)"""
         try:
-            # 기업코드가 지정되지 않으면 전체 상장기업 대상
+            # 기업코드가 지정되지 않으면 company_info 테이블의 전체 종목 대상
             if corp_code is None:
-                conn = self.config_manager.get_database_connection('dart')
-                corp_df = pd.read_sql("SELECT corp_code, corp_name FROM corp_codes WHERE stock_code != '' LIMIT 100", conn)
-                conn.close()
+                # company_info 테이블에서 전체 종목 가져오기
+                stock_conn = self.config_manager.get_database_connection('stock')
+                company_df = pd.read_sql("SELECT stock_code, company_name FROM company_info", stock_conn)
+                stock_conn.close()
+                
+                if company_df.empty:
+                    self.logger.error("company_info 테이블에 데이터가 없습니다.")
+                    return False
+                
+                # corp_codes 테이블에서 stock_code → corp_code 매핑 가져오기
+                dart_conn = self.config_manager.get_database_connection('dart')
+                corp_mapping_df = pd.read_sql("SELECT stock_code, corp_code, corp_name FROM corp_codes WHERE stock_code != ''", dart_conn)
+                dart_conn.close()
+                
+                if corp_mapping_df.empty:
+                    self.logger.error("corp_codes 테이블에 데이터가 없습니다. 먼저 기업코드를 수집하세요.")
+                    return False
+                
+                # stock_code 기준으로 매핑
+                merged_df = company_df.merge(corp_mapping_df, on='stock_code', how='inner')
+                
+                if merged_df.empty:
+                    self.logger.error("company_info와 corp_codes 테이블 간 매핑 데이터가 없습니다.")
+                    return False
+                
+                self.logger.info(f"📊 전체 수집 대상: company_info 테이블 {len(company_df):,}개 → corp_codes 매핑 {len(merged_df):,}개 종목")
+                target_companies = merged_df[['corp_code', 'corp_name', 'stock_code']].to_dict('records')
+                
             else:
-                corp_df = pd.DataFrame([{'corp_code': corp_code, 'corp_name': ''}])
+                # 특정 기업코드 지정된 경우
+                target_companies = [{'corp_code': corp_code, 'corp_name': '', 'stock_code': ''}]
             
-            if corp_df.empty:
-                self.logger.error("대상 기업이 없습니다. 먼저 기업코드를 수집하세요.")
-                return False
-            
-            # 날짜 범위 설정
+            # 날짜 범위 설정 (3개월 = 90일)
             end_date = datetime.now()
             start_date = end_date - timedelta(days=days)
             
-            for idx, corp_row in corp_df.iterrows():
-                corp_code = corp_row['corp_code']
-                corp_name = corp_row['corp_name']
-                
-                self.logger.info(f"진행률: {idx+1}/{len(corp_df)} - {corp_name}({corp_code}) 공시정보 수집")
-                
-                # 공시정보 수집
-                disclosure_data = self.get_disclosures(
-                    corp_code, 
-                    start_date.strftime('%Y-%m-%d'),
-                    end_date.strftime('%Y-%m-%d')
-                )
-                
-                if not disclosure_data.empty:
-                    self.save_to_database(disclosure_data=disclosure_data)
-                
-                # API 호출 제한 대응
-                time.sleep(0.1)
+            self.logger.info(f"📅 공시정보 수집 기간: {start_date.strftime('%Y-%m-%d')} ~ {end_date.strftime('%Y-%m-%d')} ({days}일)")
             
-            self.logger.info("✅ 공시정보 수집 완료")
+            success_count = 0
+            total_disclosures = 0
+            
+            for idx, company in enumerate(target_companies):
+                corp_code = company['corp_code']
+                corp_name = company['corp_name']
+                stock_code = company.get('stock_code', '')
+                
+                self.logger.info(f"📈 진행률: {idx+1:,}/{len(target_companies):,} - {corp_name}({stock_code}) 공시정보 수집")
+                
+                try:
+                    # 공시정보 수집
+                    disclosure_data = self.get_disclosures(
+                        corp_code, 
+                        start_date.strftime('%Y-%m-%d'),
+                        end_date.strftime('%Y-%m-%d')
+                    )
+                    
+                    if not disclosure_data.empty:
+                        if self.save_to_database(disclosure_data=disclosure_data):
+                            success_count += 1
+                            total_disclosures += len(disclosure_data)
+                            self.logger.debug(f"✅ {corp_name}: {len(disclosure_data)}건 수집")
+                        else:
+                            self.logger.warning(f"⚠️ {corp_name}: 데이터베이스 저장 실패")
+                    else:
+                        self.logger.debug(f"📄 {corp_name}: 공시정보 없음")
+                        
+                except Exception as e:
+                    self.logger.error(f"❌ {corp_name}({corp_code}) 공시정보 수집 실패: {e}")
+                    continue
+                
+                # API 호출 제한 대응 (초당 10회 제한)
+                time.sleep(0.15)
+                
+                # 진행률 로그 (100개씩)
+                if (idx + 1) % 100 == 0:
+                    self.logger.info(f"🔄 중간 현황: {idx+1:,}/{len(target_companies):,} 처리완료, 성공: {success_count:,}개, 총 공시: {total_disclosures:,}건")
+            
+            self.logger.info(f"✅ 공시정보 수집 완료")
+            self.logger.info(f"📊 최종 결과: 대상 {len(target_companies):,}개 → 성공 {success_count:,}개 → 총 공시 {total_disclosures:,}건")
             return True
             
         except Exception as e:
@@ -363,7 +408,7 @@ def main():
     parser.add_argument('--corp_code', type=str, help='특정 기업코드 (8자리)')
     parser.add_argument('--year', type=int, help='수집 연도')
     parser.add_argument('--quarter', type=int, choices=[1, 2, 3, 4], help='수집 분기')
-    parser.add_argument('--days', type=int, default=30, help='공시정보 수집 기간 (일수)')
+    parser.add_argument('--days', type=int, default=90, help='공시정보 수집 기간 (일수, 기본값: 90일 = 3개월)')
     parser.add_argument('--all', action='store_true', help='전체 데이터 수집 (기업코드+재무+공시)')
     parser.add_argument('--log_level', type=str, default='INFO',
                        choices=['DEBUG', 'INFO', 'WARNING', 'ERROR'],

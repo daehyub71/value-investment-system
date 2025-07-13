@@ -62,6 +62,10 @@ data/processed/
 data/databases/*.db
 data/cache/
 
+*.db-shm
+*.db-wal
+*.db-journal
+
 # 로그 파일
 logs/
 *.log

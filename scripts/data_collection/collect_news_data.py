@@ -13,7 +13,6 @@ import sys
 import os
 import argparse
 import sqlite3
-import pandas as pd
 import requests
 import json
 import re
@@ -22,24 +21,41 @@ from pathlib import Path
 import logging
 import time
 from urllib.parse import quote
+from dotenv import load_dotenv
+
+# 환경변수 로드
+load_dotenv()
 
 # 프로젝트 루트 디렉토리를 Python 경로에 추가
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from config.database_config import DatabaseConfig
-from config.api_config import APIConfig
-from config.logging_config import setup_logging
+try:
+    from config import ConfigManager
+except ImportError:
+    print("⚠️  ConfigManager를 찾을 수 없습니다. 기본 설정으로 진행합니다.")
+    ConfigManager = None
 
 class NewsDataCollector:
     """뉴스 데이터 수집 클래스"""
     
     def __init__(self):
-        self.db_config = DatabaseConfig()
-        self.api_config = APIConfig()
-        self.naver_client_id = self.api_config.naver_client_id
-        self.naver_client_secret = self.api_config.naver_client_secret
+        # ConfigManager를 통한 통합 설정 관리
+        if ConfigManager:
+            self.config_manager = ConfigManager()
+            self.logger = self.config_manager.get_logger('NewsDataCollector')
+            
+            # 네이버 API 설정 가져오기
+            naver_config = self.config_manager.get_naver_news_config()
+            self.naver_client_id = naver_config.get('client_id')
+            self.naver_client_secret = naver_config.get('client_secret')
+        else:
+            # 기본 설정
+            self.logger = logging.getLogger(__name__)
+            self.naver_client_id = os.getenv('NAVER_CLIENT_ID')
+            self.naver_client_secret = os.getenv('NAVER_CLIENT_SECRET')
+        
         self.base_url = "https://openapi.naver.com/v1/search/news.json"
-        self.logger = logging.getLogger(__name__)
+        self.db_path = Path('data/databases/news_data.db')
         
         if not self.naver_client_id or not self.naver_client_secret:
             raise ValueError("네이버 API 키가 설정되지 않았습니다. .env 파일을 확인하세요.")
@@ -69,24 +85,28 @@ class NewsDataCollector:
         """주식코드로 회사명 조회"""
         try:
             # stock DB에서 회사명 조회
-            with self.db_config.get_connection('stock') as conn:
-                result = conn.execute(
-                    "SELECT company_name FROM company_info WHERE stock_code = ?",
-                    (stock_code,)
-                ).fetchone()
-                
-                if result:
-                    return result[0]
+            stock_db_path = Path('data/databases/stock_data.db')
+            if stock_db_path.exists():
+                with sqlite3.connect(stock_db_path) as conn:
+                    result = conn.execute(
+                        "SELECT company_name FROM company_info WHERE stock_code = ?",
+                        (stock_code,)
+                    ).fetchone()
+                    
+                    if result:
+                        return result[0]
             
             # dart DB에서도 조회 시도
-            with self.db_config.get_connection('dart') as conn:
-                result = conn.execute(
-                    "SELECT corp_name FROM corp_codes WHERE stock_code = ?",
-                    (stock_code,)
-                ).fetchone()
-                
-                if result:
-                    return result[0]
+            dart_db_path = Path('data/databases/dart_data.db')
+            if dart_db_path.exists():
+                with sqlite3.connect(dart_db_path) as conn:
+                    result = conn.execute(
+                        "SELECT corp_name FROM corp_codes WHERE stock_code = ?",
+                        (stock_code,)
+                    ).fetchone()
+                    
+                    if result:
+                        return result[0]
             
             return None
             
@@ -197,93 +217,123 @@ class NewsDataCollector:
     def process_news_data(self, news_items, stock_code=None, company_name=None):
         """뉴스 데이터 처리"""
         news_data = []
-        sentiment_data = []
         
         for item in news_items:
             # HTML 태그 제거
             title = re.sub(r'<[^>]+>', '', item.get('title', ''))
             description = re.sub(r'<[^>]+>', '', item.get('description', ''))
             
-            # 뉴스 기사 데이터
+            # 감정분석 수행
+            sentiment_result = self.analyze_sentiment(f"{title} {description}")
+            
+            # 감정 라벨 결정
+            if sentiment_result['sentiment_score'] > 0.1:
+                sentiment_label = 'positive'
+            elif sentiment_result['sentiment_score'] < -0.1:
+                sentiment_label = 'negative'
+            else:
+                sentiment_label = 'neutral'
+            
+            # 뉴스 기사 데이터 (감정분석 결과 포함)
             news_info = {
                 'title': title,
+                'description': description,
                 'originallink': item.get('originallink', ''),
                 'link': item.get('link', ''),
-                'description': description,
                 'pubDate': item.get('pubDate', ''),
                 'stock_code': stock_code,
-                'company_name': company_name,
                 'category': '금융',
                 'source': '네이버뉴스',
-                'created_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                'sentiment_score': sentiment_result['sentiment_score'],
+                'sentiment_label': sentiment_label,
+                'confidence_score': sentiment_result['confidence'],
+                'keywords': sentiment_result['keywords']
             }
             news_data.append(news_info)
-            
-            # 감정분석
-            sentiment_result = self.analyze_sentiment(f"{title} {description}")
-            sentiment_info = {
-                'news_id': None,  # DB 저장 후 업데이트
-                'stock_code': stock_code,
-                'sentiment_score': sentiment_result['sentiment_score'],
-                'positive_score': sentiment_result['positive_score'],
-                'negative_score': sentiment_result['negative_score'],
-                'neutral_score': sentiment_result['neutral_score'],
-                'confidence': sentiment_result['confidence'],
-                'keywords': sentiment_result['keywords'],
-                'created_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            }
-            sentiment_data.append(sentiment_info)
         
-        return pd.DataFrame(news_data), pd.DataFrame(sentiment_data)
+        return news_data, []  # sentiment_data는 비워두고 다른 곳에서 집계
     
     def calculate_market_sentiment(self, stock_code, date):
-        """시장 감정지수 계산"""
+        """시장 감정지수 계산 - 새로운 스키마에 맞게 수정"""
         try:
-            with self.db_config.get_connection('news') as conn:
-                # 해당 날짜의 뉴스 감정점수 조회
+            # 뉴스 DB 연결
+            with sqlite3.connect(self.db_path) as conn:
+                # 새로운 스키마에 맞게 수정된 쿼리
+                # news_articles 테이블에서 해당 날짜의 뉴스 감정점수 조회
                 query = """
-                SELECT sentiment_score, confidence 
-                FROM sentiment_scores 
+                SELECT sentiment_score, confidence_score
+                FROM news_articles 
                 WHERE stock_code = ? AND date(created_at) = ?
                 """
                 
-                df = pd.read_sql(query, conn, params=(stock_code, date))
+                cursor = conn.execute(query, (stock_code, date))
+                results = cursor.fetchall()
                 
-                if df.empty:
-                    return None
+                if not results:
+                    # 뉴스가 없는 경우 기본값으로 저장
+                    return {
+                        'date': date,
+                        'stock_code': stock_code,
+                        'daily_sentiment': 0.0,
+                        'weekly_sentiment': None,
+                        'monthly_sentiment': None,
+                        'total_news_count': 0,
+                        'positive_news_count': 0,
+                        'negative_news_count': 0,
+                        'neutral_news_count': 0,
+                        'fundamental_news_count': 0,
+                        'fundamental_sentiment': 0.0,
+                        'sentiment_momentum': 0.0,
+                        'sentiment_volatility': 0.0,
+                        'sentiment_final_score': 50.0,  # 중립 점수
+                        'created_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                        'updated_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                    }
+                
+                # 감정 점수 통계 계산
+                sentiment_scores = [row[0] for row in results]
+                confidence_scores = [row[1] for row in results]
                 
                 # 신뢰도 가중 평균으로 일일 감정점수 계산
-                weighted_sentiment = (df['sentiment_score'] * df['confidence']).sum() / df['confidence'].sum()
+                total_weighted = sum(score * conf for score, conf in results)
+                total_confidence = sum(confidence_scores)
                 
-                # 주별, 월별 감정점수도 계산 (7일, 30일 이동평균)
-                week_ago = (datetime.strptime(date, '%Y-%m-%d') - timedelta(days=7)).strftime('%Y-%m-%d')
-                month_ago = (datetime.strptime(date, '%Y-%m-%d') - timedelta(days=30)).strftime('%Y-%m-%d')
+                if total_confidence == 0:
+                    weighted_sentiment = 0.0
+                else:
+                    weighted_sentiment = total_weighted / total_confidence
                 
-                week_query = """
-                SELECT sentiment_score, confidence 
-                FROM sentiment_scores 
-                WHERE stock_code = ? AND date(created_at) >= ? AND date(created_at) <= ?
+                # 뉴스 개수별 분류
+                positive_count = sum(1 for score in sentiment_scores if score > 0.1)
+                negative_count = sum(1 for score in sentiment_scores if score < -0.1)
+                neutral_count = len(sentiment_scores) - positive_count - negative_count
+                
+                # 펀더멘털 뉴스 개수 (category가 '금융'인 뉴스)
+                fundamental_query = """
+                SELECT COUNT(*) FROM news_articles 
+                WHERE stock_code = ? AND date(created_at) = ? AND category = '금융'
                 """
+                cursor = conn.execute(fundamental_query, (stock_code, date))
+                fundamental_count = cursor.fetchone()[0]
                 
-                week_df = pd.read_sql(week_query, conn, params=(stock_code, week_ago, date))
-                month_df = pd.read_sql(week_query, conn, params=(stock_code, month_ago, date))
-                
-                weekly_sentiment = None
-                monthly_sentiment = None
-                
-                if not week_df.empty:
-                    weekly_sentiment = (week_df['sentiment_score'] * week_df['confidence']).sum() / week_df['confidence'].sum()
-                
-                if not month_df.empty:
-                    monthly_sentiment = (month_df['sentiment_score'] * month_df['confidence']).sum() / month_df['confidence'].sum()
+                # 감정 점수를 0-100 스케일로 변환
+                sentiment_final_score = (weighted_sentiment + 1) * 50  # -1~1 → 0~100
                 
                 return {
                     'date': date,
                     'stock_code': stock_code,
                     'daily_sentiment': weighted_sentiment,
-                    'weekly_sentiment': weekly_sentiment,
-                    'monthly_sentiment': monthly_sentiment,
-                    'news_count': len(df),
+                    'weekly_sentiment': None,  # 향후 구현
+                    'monthly_sentiment': None,  # 향후 구현
+                    'total_news_count': len(results),
+                    'positive_news_count': positive_count,
+                    'negative_news_count': negative_count,
+                    'neutral_news_count': neutral_count,
+                    'fundamental_news_count': fundamental_count,
+                    'fundamental_sentiment': weighted_sentiment,  # 단순화
+                    'sentiment_momentum': 0.0,  # 향후 구현
+                    'sentiment_volatility': 0.0,  # 향후 구현
+                    'sentiment_final_score': sentiment_final_score,
                     'created_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                     'updated_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                 }
@@ -295,46 +345,88 @@ class NewsDataCollector:
     def save_to_database(self, news_data=None, sentiment_data=None, market_sentiment_data=None):
         """데이터베이스에 저장"""
         try:
-            with self.db_config.get_connection('news') as conn:
+            with sqlite3.connect(self.db_path) as conn:
                 # 뉴스 기사 저장
-                if news_data is not None and not news_data.empty:
-                    news_data.to_sql('news_articles', conn, if_exists='append', index=False, method='ignore')
-                    self.logger.info(f"뉴스 기사 저장 완료: {len(news_data)}건")
+                if news_data:
+                    for news_item in news_data:
+                        try:
+                            conn.execute('''
+                                INSERT OR IGNORE INTO news_articles 
+                                (stock_code, title, description, originallink, link, pubDate, 
+                                 source, category, sentiment_score, sentiment_label, confidence_score, keywords)
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            ''', (
+                                news_item['stock_code'],
+                                news_item['title'],
+                                news_item['description'],
+                                news_item['originallink'],
+                                news_item['link'],
+                                news_item['pubDate'],
+                                news_item['source'],
+                                news_item['category'],
+                                news_item.get('sentiment_score', 0.0),
+                                news_item.get('sentiment_label', 'neutral'),
+                                news_item.get('confidence_score', 0.0),
+                                news_item.get('keywords', '')
+                            ))
+                        except sqlite3.Error as e:
+                            self.logger.warning(f"뉴스 저장 실패: {e}")
+                            continue
                     
-                    # 저장된 뉴스 ID 조회하여 감정분석 데이터에 연결
-                    if sentiment_data is not None and not sentiment_data.empty:
-                        for idx, row in news_data.iterrows():
-                            news_id = conn.execute(
-                                "SELECT id FROM news_articles WHERE link = ? ORDER BY id DESC LIMIT 1",
-                                (row['link'],)
-                            ).fetchone()
-                            
-                            if news_id and idx < len(sentiment_data):
-                                sentiment_data.iloc[idx, sentiment_data.columns.get_loc('news_id')] = news_id[0]
+                    self.logger.info(f"뉴스 기사 저장 완료: {len(news_data)}건")
                 
                 # 감정분석 데이터 저장
-                if sentiment_data is not None and not sentiment_data.empty:
-                    sentiment_data.to_sql('sentiment_scores', conn, if_exists='append', index=False)
+                if sentiment_data:
+                    for sentiment_item in sentiment_data:
+                        try:
+                            conn.execute('''
+                                INSERT INTO sentiment_scores 
+                                (stock_code, score, confidence, keywords, created_at)
+                                VALUES (?, ?, ?, ?, ?)
+                            ''', (
+                                sentiment_item['stock_code'],
+                                sentiment_item['sentiment_score'],
+                                sentiment_item['confidence'],
+                                sentiment_item['keywords'],
+                                sentiment_item['created_at']
+                            ))
+                        except sqlite3.Error as e:
+                            self.logger.warning(f"감정분석 데이터 저장 실패: {e}")
+                            continue
+                    
                     self.logger.info(f"감정분석 데이터 저장 완료: {len(sentiment_data)}건")
                 
-                # 시장감정지수 저장
-                if market_sentiment_data is not None:
-                    conn.execute('''
-                        INSERT OR REPLACE INTO market_sentiment
-                        (date, stock_code, daily_sentiment, weekly_sentiment, monthly_sentiment, 
-                         news_count, created_at, updated_at)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                    ''', (
-                        market_sentiment_data['date'],
-                        market_sentiment_data['stock_code'],
-                        market_sentiment_data['daily_sentiment'],
-                        market_sentiment_data['weekly_sentiment'],
-                        market_sentiment_data['monthly_sentiment'],
-                        market_sentiment_data['news_count'],
-                        market_sentiment_data['created_at'],
-                        market_sentiment_data['updated_at']
-                    ))
-                    self.logger.info("시장감정지수 저장 완료")
+                # 시장감정지수 저장 (새로운 스키마)
+                if market_sentiment_data:
+                    try:
+                        conn.execute('''
+                            INSERT OR REPLACE INTO sentiment_scores
+                            (stock_code, date, daily_sentiment, weekly_sentiment, monthly_sentiment, 
+                             total_news_count, positive_news_count, negative_news_count, neutral_news_count,
+                             fundamental_news_count, fundamental_sentiment, sentiment_momentum, 
+                             sentiment_volatility, sentiment_final_score, created_at, updated_at)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ''', (
+                            market_sentiment_data['stock_code'],
+                            market_sentiment_data['date'],
+                            market_sentiment_data['daily_sentiment'],
+                            market_sentiment_data['weekly_sentiment'],
+                            market_sentiment_data['monthly_sentiment'],
+                            market_sentiment_data['total_news_count'],
+                            market_sentiment_data['positive_news_count'],
+                            market_sentiment_data['negative_news_count'],
+                            market_sentiment_data['neutral_news_count'],
+                            market_sentiment_data['fundamental_news_count'],
+                            market_sentiment_data['fundamental_sentiment'],
+                            market_sentiment_data['sentiment_momentum'],
+                            market_sentiment_data['sentiment_volatility'],
+                            market_sentiment_data['sentiment_final_score'],
+                            market_sentiment_data['created_at'],
+                            market_sentiment_data['updated_at']
+                        ))
+                        self.logger.info("시장감정지수 저장 완료")
+                    except sqlite3.Error as e:
+                        self.logger.warning(f"시장감정지수 저장 실패: {e}")
                 
                 conn.commit()
                 return True
@@ -394,27 +486,30 @@ class NewsDataCollector:
         """전체 종목 뉴스 수집"""
         try:
             # 주요 종목 리스트 조회 (시가총액 상위)
-            with self.db_config.get_connection('stock') as conn:
-                stock_df = pd.read_sql(f"""
+            stock_db_path = Path('data/databases/stock_data.db')
+            if not stock_db_path.exists():
+                self.logger.error("주식 데이터베이스를 찾을 수 없습니다.")
+                return False
+                
+            with sqlite3.connect(stock_db_path) as conn:
+                cursor = conn.execute(f"""
                     SELECT stock_code, company_name, market_cap
                     FROM company_info 
-                    WHERE market_cap IS NOT NULL 
+                    WHERE market_cap IS NOT NULL AND market_cap > 0
                     ORDER BY market_cap DESC 
                     LIMIT {limit}
-                """, conn)
+                """)
+                stock_list = cursor.fetchall()
             
-            if stock_df.empty:
+            if not stock_list:
                 self.logger.error("종목 리스트를 찾을 수 없습니다.")
                 return False
             
-            self.logger.info(f"전체 종목 뉴스 수집 시작: {len(stock_df)}개 종목")
+            self.logger.info(f"전체 종목 뉴스 수집 시작: {len(stock_list)}개 종목")
             
             success_count = 0
-            for idx, row in stock_df.iterrows():
-                stock_code = row['stock_code']
-                company_name = row['company_name']
-                
-                self.logger.info(f"진행률: {idx+1}/{len(stock_df)} - {company_name}({stock_code})")
+            for idx, (stock_code, company_name, market_cap) in enumerate(stock_list):
+                self.logger.info(f"진행률: {idx+1}/{len(stock_list)} - {company_name}({stock_code})")
                 
                 if self.collect_news_for_stock(stock_code, days):
                     success_count += 1
@@ -422,7 +517,7 @@ class NewsDataCollector:
                 # API 호출 제한 대응
                 time.sleep(0.1)
             
-            self.logger.info(f"전체 뉴스 수집 완료: {success_count}/{len(stock_df)} 성공")
+            self.logger.info(f"전체 뉴스 수집 완료: {success_count}/{len(stock_list)} 성공")
             return success_count > 0
             
         except Exception as e:
@@ -444,8 +539,11 @@ def main():
     
     args = parser.parse_args()
     
-    # 로깅 설정
-    setup_logging(level=args.log_level)
+    # 기본 로깅 설정
+    logging.basicConfig(
+        level=getattr(logging, args.log_level),
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
     logger = logging.getLogger(__name__)
     
     # 수집기 초기화
