@@ -1,0 +1,19 @@
+{
+  "screening_date": "2025-07-13T11:47:45.046689",
+  "total_selected": 11,
+  "stocks": [
+    {
+      "stock_code": "323410",
+      "company_name": "카카오뱅크",
+      "market_cap": 125400.0,
+      "size_category": "Small",
+      "metrics": {
+        "roe": 15.214254037837486,
+        "debt_ratio": 46.11561720911813,
+        "current_ratio": 169.79097280232907,
+        "revenue_growth": 21.911270061123616,
+        "operating_margin": 22.402985746530902,
+        "per": 11.139815357037612,
+        "pbr": 1.8762634997574963,
+        "dividend_yield": 2.8109786812551576,
+        "consecutive_profit_years": 

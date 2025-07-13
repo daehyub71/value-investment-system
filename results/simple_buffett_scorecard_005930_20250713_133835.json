@@ -1,0 +1,104 @@
+{
+  "stock_code": "005930",
+  "company_name": "Samsung Electronics Co., Ltd.",
+  "sector": "Technology",
+  "calculation_date": "2025-07-13 13:38:35",
+  "data_source": "Yahoo Finance",
+  "current_price": 62600.0,
+  "target_price": 72824.56,
+  "recommendation": "buy",
+  "scores": {
+    "valuation": {
+      "category": "valuation",
+      "total_score": 16,
+      "max_score": 40,
+      "percentage": 40.0,
+      "details": {
+        "forward_pe": {
+          "value": 10.675453,
+          "score": 8,
+          "max": 12
+        },
+        "pbr": {
+          "value": null,
+          "score": 0,
+          "max": 10
+        },
+        "peg_ratio": {
+          "value": null,
+          "score": 0,
+          "max": 10
+        },
+        "ev_ebitda": {
+          "value": 4.217,
+          "score": 8,
+          "max": 8
+        }
+      }
+    },
+    "profitability": {
+      "category": "profitability",
+      "total_score": 2,
+      "max_score": 30,
+      "percentage": 6.666666666666667,
+      "details": {
+        "roe": {
+          "value": 9.228,
+          "score": 0,
+          "max": 12
+        },
+        "roa": {
+          "value": 4.153,
+          "score": 2,
+          "max": 10
+        },
+        "operating_margin": {
+          "value": 8.447000000000001,
+          "score": 0,
+          "max": 8
+        }
+      }
+    },
+    "growth": {
+      "category": "growth",
+      "total_score": 6,
+      "max_score": 20,
+      "percentage": 30.0,
+      "details": {
+        "revenue_growth": {
+          "value": 10.0,
+          "score": 6,
+          "max": 10
+        },
+        "earnings_growth": {
+          "value": -99.9,
+          "score": 0,
+          "max": 10
+        }
+      }
+    },
+    "financial_health": {
+      "category": "financial_health",
+      "total_score": 4,
+      "max_score": 10,
+      "percentage": 40.0,
+      "details": {
+        "debt_equity": {
+          "value": 2.741,
+          "score": 0,
+          "max": 6
+        },
+        "current_ratio": {
+          "value": 2.467,
+          "score": 4,
+          "max": 4
+        }
+      }
+    }
+  },
+  "total_score": 28,
+  "max_score": 100,
+  "percentage": 28.000000000000004,
+  "investment_grade": "Avoid",
+  "upside_potential": 16.33316293929712
+}

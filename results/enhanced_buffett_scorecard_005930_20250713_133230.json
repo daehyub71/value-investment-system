@@ -1,0 +1,88 @@
+{
+  "stock_code": "005930",
+  "company_name": "Unknown",
+  "calculation_date": "2025-07-13 13:32:30",
+  "data_sources": [
+    "Yahoo Finance (Forward P/E)"
+  ],
+  "scores": {
+    "profitability": {
+      "category": "profitability",
+      "total_score": 0,
+      "max_score": 25,
+      "percentage": 0.0,
+      "details": {
+        "roe": {
+          "value": 0,
+          "score": 0,
+          "max": 7
+        },
+        "roa": {
+          "value": 0,
+          "score": 0,
+          "max": 5
+        },
+        "operating_margin": {
+          "value": 0,
+          "score": 0,
+          "max": 4
+        }
+      }
+    },
+    "growth": {
+      "category": "growth",
+      "total_score": 0,
+      "max_score": 20,
+      "percentage": 0.0,
+      "details": {
+        "forward_eps_growth": {
+          "value": null,
+          "score": 0,
+          "max": 6
+        }
+      }
+    },
+    "stability": {
+      "category": "stability",
+      "total_score": 0,
+      "max_score": 25,
+      "percentage": 0,
+      "details": {}
+    },
+    "efficiency": {
+      "category": "efficiency",
+      "total_score": 0,
+      "max_score": 10,
+      "percentage": 0,
+      "details": {}
+    },
+    "valuation": {
+      "category": "valuation",
+      "total_score": 4,
+      "max_score": 20,
+      "percentage": 20.0,
+      "details": {
+        "per": {
+          "value": 10.675453,
+          "score": 4,
+          "max": 6,
+          "type": "Forward P/E"
+        },
+        "pbr": {
+          "value": null,
+          "score": 0,
+          "max": 5
+        },
+        "peg_ratio": {
+          "value": null,
+          "score": 0,
+          "max": 4
+        }
+      }
+    }
+  },
+  "total_score": 4,
+  "max_score": 100,
+  "percentage": 4.0,
+  "investment_grade": "Avoid"
+}
