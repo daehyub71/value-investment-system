@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-전체 종목 배치 워런 버핏 스코어카드 분석기
+전체 종목 배치 워런 버핏 스코어카드 분석기 (투자 가능 여부 포함)
 수집된 모든 기업에 대해 워런 버핏 스코어 계산 및 랭킹
+투자 가능 여부 자동 판단 포함
 
 주요 기능:
 1. 전체 수집된 기업 자동 발견
 2. 배치로 워런 버핏 스코어 계산
-3. 상위/하위 종목 랭킹
-4. 투자 추천 종목 필터링
-5. 결과를 CSV/JSON으로 저장
+3. 투자 가능 여부 자동 판단
+4. 상위/하위 종목 랭킹
+5. 투자 추천 종목 필터링
+6. 결과를 CSV/JSON으로 저장
 """
 
 import sqlite3
@@ -25,17 +27,21 @@ import time
 warnings.filterwarnings('ignore')
 
 class BatchBuffettAnalyzer:
-    """전체 종목 배치 워런 버핏 분석기"""
+    """전체 종목 배치 워런 버핏 분석기 (투자 가능 여부 포함)"""
     
-    def __init__(self):
+    def __init__(self, update_investment_status=True):
         """초기화"""
         import logging
         logging.basicConfig(level=logging.INFO)
         self.logger = logging.getLogger('BatchBuffettAnalyzer')
         
+        # 투자 가능 여부 업데이트 옵션
+        self.update_investment_status = update_investment_status
+        
         # 데이터베이스 경로
         self.dart_db = Path("data/databases/dart_data.db")
         self.stock_db = Path("data/databases/stock_data.db")
+        self.buffett_db = Path("data/databases/buffett_scorecard.db")
         
         # 점수 가중치
         self.PROFITABILITY_WEIGHT = 30
@@ -49,7 +55,7 @@ class BatchBuffettAnalyzer:
         self.output_dir = Path("results/buffett_analysis")
         self.output_dir.mkdir(parents=True, exist_ok=True)
         
-        self.logger.info("BatchBuffettAnalyzer 초기화 완료")
+        self.logger.info("BatchBuffettAnalyzer 초기화 완료 (투자 가능 여부 포함)")
     
     def discover_available_companies(self) -> pd.DataFrame:
         """분석 가능한 기업들 자동 발견"""
@@ -320,10 +326,72 @@ class BatchBuffettAnalyzer:
                 'analysis_date': datetime.now().isoformat()
             }
     
-    def analyze_all_companies(self, max_companies: int = None) -> pd.DataFrame:
-        """모든 기업 배치 분석"""
+    def determine_investment_status(self, total_score: float, profitability_score: float, stability_score: float) -> Dict[str, any]:
+        """투자 가능 여부 판단"""
         try:
-            self.logger.info("🚀 전체 기업 워런 버핏 스코어카드 배치 분석 시작")
+            # 투자 경고 수준 결정
+            investment_warning = 'NONE'
+            is_investable = True
+            listing_status = 'LISTED'
+            
+            # 점수 기반 투자 위험도 판단
+            if total_score < 20:
+                investment_warning = 'DESIGNATED'  # 관리종목 수준
+                is_investable = False
+            elif total_score < 30 or stability_score < 5 or profitability_score < 5:
+                investment_warning = 'ALERT'
+                is_investable = True  # 경고하지만 투자는 가능
+            elif total_score < 50:
+                investment_warning = 'CAUTION'
+                is_investable = True
+            
+            # 투자 등급 결정
+            if total_score >= 88:
+                investment_grade = 'Strong Buy'
+            elif total_score >= 77:
+                investment_grade = 'Buy'
+            elif total_score >= 66:
+                investment_grade = 'Hold'
+            elif total_score >= 44:
+                investment_grade = 'Sell'
+            else:
+                investment_grade = 'Strong Sell'
+            
+            # 등급 결정
+            if total_score >= 88:
+                grade = 'S'
+            elif total_score >= 77:
+                grade = 'A'
+            elif total_score >= 66:
+                grade = 'B'
+            elif total_score >= 44:
+                grade = 'C'
+            else:
+                grade = 'D'
+            
+            return {
+                'is_investable': is_investable,
+                'investment_warning': investment_warning,
+                'listing_status': listing_status,
+                'investment_grade': investment_grade,
+                'grade': grade,
+                'last_status_check': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            }
+            
+        except Exception as e:
+            return {
+                'is_investable': False,
+                'investment_warning': 'ALERT',
+                'listing_status': 'LISTED',
+                'investment_grade': 'Strong Sell',
+                'grade': 'D',
+                'last_status_check': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            }
+    
+    def analyze_all_companies(self, max_companies: int = None) -> pd.DataFrame:
+        """모든 기업 배치 분석 (투자 가능 여부 포함)"""
+        try:
+            self.logger.info("🚀 전체 기업 워런 버핏 스코어카드 배치 분석 시작 (투자 가능 여부 포함)")
             
             # 1. 분석 가능한 기업들 발견
             companies_df = self.discover_available_companies()
@@ -365,17 +433,33 @@ class BatchBuffettAnalyzer:
                     # 워런 버핏 스코어 계산
                     score_result = self.calculate_buffett_score(financial_data, stock_code)
                     
+                    # 투자 가능 여부 판단
+                    total_score = score_result['total_score']
+                    profitability_score = score_result['scores'].get('profitability', 0)
+                    stability_score = score_result['scores'].get('stability', 0)
+                    
+                    investment_status = self.determine_investment_status(total_score, profitability_score, stability_score)
+                    
                     # 결과 수집
                     result = {
                         'stock_code': stock_code,
                         'company_name': company_name,
                         'corp_code': corp_code,
-                        'total_score': score_result['total_score'],
-                        'profitability_score': score_result['scores'].get('profitability', 0),
-                        'stability_score': score_result['scores'].get('stability', 0),
+                        'total_score': total_score,
+                        'grade': investment_status['grade'],
+                        'investment_grade': investment_status['investment_grade'],
+                        'profitability_score': profitability_score,
+                        'stability_score': stability_score,
                         'efficiency_score': score_result['scores'].get('efficiency', 0),
                         'growth_score': score_result['scores'].get('growth', 0),
                         'valuation_score': score_result['scores'].get('valuation', 0),
+                        
+                        # 투자 가능 여부 필드
+                        'is_investable': investment_status['is_investable'],
+                        'investment_warning': investment_status['investment_warning'],
+                        'listing_status': investment_status['listing_status'],
+                        'last_status_check': investment_status['last_status_check'],
+                        
                         'financial_records': company['financial_records'],
                         'latest_year': company['latest_year'],
                         'analysis_date': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -400,9 +484,13 @@ class BatchBuffettAnalyzer:
             # 4. 결과 DataFrame 생성
             if results:
                 results_df = pd.DataFrame(results)
-                results_df = results_df.sort_values('total_score', ascending=False).reset_index(drop=True)
+                # 투자 가능한 종목 우선, 그 다음 점수순 정렬
+                results_df = results_df.sort_values(['is_investable', 'total_score'], ascending=[False, False]).reset_index(drop=True)
                 
                 self.logger.info(f"✅ 분석 완료: {len(results_df)}개 기업")
+                investable_count = len(results_df[results_df['is_investable'] == True])
+                self.logger.info(f"💎 투자 가능 기업: {investable_count}개 ({investable_count/len(results_df)*100:.1f}%)")
+                
                 return results_df
             else:
                 self.logger.warning("분석된 기업이 없습니다.")
@@ -413,27 +501,49 @@ class BatchBuffettAnalyzer:
             return pd.DataFrame()
     
     def save_results(self, results_df: pd.DataFrame):
-        """결과 저장"""
+        """결과 저장 (투자 가능 여부 포함)"""
         try:
             if results_df.empty:
                 return
             
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
             
-            # CSV 저장
-            csv_path = self.output_dir / f"buffett_analysis_{timestamp}.csv"
+            # 전체 결과 CSV 저장
+            csv_path = self.output_dir / f"buffett_analysis_with_status_{timestamp}.csv"
             results_df.to_csv(csv_path, index=False, encoding='utf-8-sig')
-            self.logger.info(f"📄 CSV 결과 저장: {csv_path}")
+            self.logger.info(f"📄 전체 결과 CSV 저장: {csv_path}")
             
-            # JSON 저장 (상위 50개만)
-            top_50 = results_df.head(50)
+            # 투자 가능한 종목만 별도 저장
+            investable_df = results_df[results_df['is_investable'] == True].copy()
+            if len(investable_df) > 0:
+                investable_path = self.output_dir / f"buffett_investable_analysis_{timestamp}.csv"
+                investable_df.to_csv(investable_path, index=False, encoding='utf-8-sig')
+                self.logger.info(f"📄 투자 가능 종목 CSV 저장: {investable_path}")
+                
+                # 투자 추천 종목 (Strong Buy, Buy)
+                recommendations = investable_df[investable_df['investment_grade'].isin(['Strong Buy', 'Buy'])].copy()
+                if len(recommendations) > 0:
+                    rec_path = self.output_dir / f"buffett_recommendations_{timestamp}.csv"
+                    recommendations.to_csv(rec_path, index=False, encoding='utf-8-sig')
+                    self.logger.info(f"📄 투자 추천 종목 CSV 저장: {rec_path}")
+            
+            # 투자 불가 종목 별도 저장
+            non_investable_df = results_df[results_df['is_investable'] == False].copy()
+            if len(non_investable_df) > 0:
+                non_inv_path = self.output_dir / f"buffett_non_investable_{timestamp}.csv"
+                non_investable_df.to_csv(non_inv_path, index=False, encoding='utf-8-sig')
+                self.logger.info(f"📄 투자 불가 종목 CSV 저장: {non_inv_path}")
+            
+            # JSON 저장 (상위 50개 투자 가능 종목)
+            top_50 = investable_df.head(50) if len(investable_df) >= 50 else results_df.head(50)
             json_data = {
                 'analysis_date': datetime.now().isoformat(),
                 'total_companies': len(results_df),
+                'investable_companies': len(investable_df),
                 'top_companies': top_50.to_dict('records')
             }
             
-            json_path = self.output_dir / f"buffett_top50_{timestamp}.json"
+            json_path = self.output_dir / f"buffett_top50_investable_{timestamp}.json"
             with open(json_path, 'w', encoding='utf-8') as f:
                 json.dump(json_data, f, ensure_ascii=False, indent=2)
             self.logger.info(f"📄 JSON 결과 저장: {json_path}")
@@ -442,70 +552,72 @@ class BatchBuffettAnalyzer:
             self.logger.error(f"결과 저장 실패: {e}")
     
     def print_summary_report(self, results_df: pd.DataFrame):
-        """요약 보고서 출력"""
+        """요약 보고서 출력 (투자 가능 여부 포함)"""
         if results_df.empty:
             print("📊 분석된 데이터가 없습니다.")
             return
         
-        print("\n" + "="*80)
-        print("🏆 워런 버핏 스코어카드 전체 기업 분석 결과")
-        print("="*80)
+        # 투자 가능/불가 분리
+        investable_df = results_df[results_df['is_investable'] == True]
+        non_investable_df = results_df[results_df['is_investable'] == False]
         
-        print(f"📊 분석 기업 수: {len(results_df)}개")
+        print("\n" + "="*100)
+        print("🏆 워런 버핏 스코어카드 전체 기업 분석 결과 (투자 가능 여부 포함)")
+        print("="*100)
+        
+        print(f"📊 전체 분석 기업 수: {len(results_df)}개")
         print(f"📅 분석 시점: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-        print(f"📈 평균 점수: {results_df['total_score'].mean():.1f}점")
-        print(f"🎯 최고 점수: {results_df['total_score'].max():.1f}점")
-        print(f"📉 최저 점수: {results_df['total_score'].min():.1f}점")
+        print(f"💎 투자 가능 기업: {len(investable_df)}개 ({len(investable_df)/len(results_df)*100:.1f}%)")
+        print(f"❌ 투자 불가 기업: {len(non_investable_df)}개 ({len(non_investable_df)/len(results_df)*100:.1f}%)")
         
-        # 등급별 분포
-        print(f"\n📊 등급별 분포:")
-        s_grade = len(results_df[results_df['total_score'] >= 88])  # 80% of 110
-        a_grade = len(results_df[(results_df['total_score'] >= 77) & (results_df['total_score'] < 88)])
-        b_grade = len(results_df[(results_df['total_score'] >= 66) & (results_df['total_score'] < 77)])
-        c_grade = len(results_df[(results_df['total_score'] >= 44) & (results_df['total_score'] < 66)])
-        d_grade = len(results_df[results_df['total_score'] < 44])
-        
-        print(f"   🥇 S급 (Strong Buy): {s_grade}개 ({s_grade/len(results_df)*100:.1f}%)")
-        print(f"   🥈 A급 (Buy): {a_grade}개 ({a_grade/len(results_df)*100:.1f}%)")
-        print(f"   🥉 B급 (Hold): {b_grade}개 ({b_grade/len(results_df)*100:.1f}%)")
-        print(f"   📊 C급 (Sell): {c_grade}개 ({c_grade/len(results_df)*100:.1f}%)")
-        print(f"   ⚠️ D급 (Strong Sell): {d_grade}개 ({d_grade/len(results_df)*100:.1f}%)")
-        
-        # 상위 20개 기업
-        print(f"\n🏆 상위 20개 투자 추천 기업:")
-        print("-" * 80)
-        print(f"{'순위':<4} {'종목코드':<8} {'기업명':<20} {'총점':<6} {'수익성':<6} {'안정성':<6} {'등급'}")
-        print("-" * 80)
-        
-        for idx, (_, row) in enumerate(results_df.head(20).iterrows(), 1):
-            total_score = row['total_score']
-            if total_score >= 88:
-                grade = "S급"
-            elif total_score >= 77:
-                grade = "A급"
-            elif total_score >= 66:
-                grade = "B급"
-            else:
-                grade = "C급"
+        # 투자 가능 종목 통계
+        if len(investable_df) > 0:
+            print(f"📈 투자 가능 종목 평균 점수: {investable_df['total_score'].mean():.1f}점")
+            print(f"🎯 투자 가능 종목 최고 점수: {investable_df['total_score'].max():.1f}점")
             
-            print(f"{idx:<4} {row['stock_code']:<8} {row['company_name']:<20} "
-                  f"{total_score:<6.1f} {row['profitability_score']:<6.1f} "
-                  f"{row['stability_score']:<6.1f} {grade}")
+            # 투자 경고 수준 분포
+            print(f"\n⚠️ 투자 경고 수준 분포:")
+            warning_dist = results_df['investment_warning'].value_counts()
+            for warning, count in warning_dist.items():
+                print(f"   {warning}: {count}개 ({count/len(results_df)*100:.1f}%)")
+            
+            # 투자 등급별 분포 (투자 가능한 종목만)
+            print(f"\n💰 투자 등급별 분포 (투자 가능한 종목만):")
+            investment_dist = investable_df['investment_grade'].value_counts()
+            for grade, count in investment_dist.items():
+                print(f"   {grade}: {count}개 ({count/len(investable_df)*100:.1f}%)")
+            
+            # 상위 20개 투자 가능 기업
+            print(f"\n🏆 상위 20개 투자 가능 추천 기업:")
+            print("-" * 100)
+            print(f"{'순위':<4} {'종목코드':<8} {'기업명':<20} {'총점':<6} {'등급':<8} {'투자등급':<12} {'경고수준'}")
+            print("-" * 100)
+            
+            for idx, (_, row) in enumerate(investable_df.head(20).iterrows(), 1):
+                warning_display = row['investment_warning'] if row['investment_warning'] != 'NONE' else '-'
+                print(f"{idx:<4} {row['stock_code']:<8} {row['company_name']:<20} "
+                      f"{row['total_score']:<6.1f} {row['grade']:<8} "
+                      f"{row['investment_grade']:<12} {warning_display}")
         
-        # 하위 10개 기업 (주의 필요)
-        print(f"\n⚠️ 하위 10개 주의 기업:")
-        print("-" * 60)
-        bottom_10 = results_df.tail(10)
-        for idx, (_, row) in enumerate(bottom_10.iterrows(), 1):
-            print(f"{len(results_df)-10+idx:<4} {row['stock_code']:<8} {row['company_name']:<20} {row['total_score']:<6.1f}점")
+        # 투자 불가 종목 요약
+        if len(non_investable_df) > 0:
+            print(f"\n⚠️ 투자 불가 종목 상위 10개 (주의 필요):")
+            print("-" * 100)
+            print(f"{'순위':<4} {'종목코드':<8} {'기업명':<20} {'총점':<6} {'경고수준':<12} {'사유'}")
+            print("-" * 100)
+            
+            for idx, (_, row) in enumerate(non_investable_df.head(10).iterrows(), 1):
+                reason = "관리종목 수준" if row['investment_warning'] == 'DESIGNATED' else "투자 위험 높음"
+                print(f"{idx:<4} {row['stock_code']:<8} {row['company_name']:<20} "
+                      f"{row['total_score']:<6.1f} {row['investment_warning']:<12} {reason}")
 
 def main():
     """메인 실행 함수"""
-    print("🚀 전체 종목 워런 버핏 스코어카드 배치 분석기")
-    print("="*70)
+    print("🚀 전체 종목 워런 버핏 스코어카드 배치 분석기 (투자 가능 여부 포함)")
+    print("="*80)
     
     try:
-        analyzer = BatchBuffettAnalyzer()
+        analyzer = BatchBuffettAnalyzer(update_investment_status=True)
         
         # 사용자 입력
         print("\n📊 분석 옵션:")
@@ -540,6 +652,8 @@ def main():
             
             print(f"\n🎉 분석 완료!")
             print(f"📊 총 {len(results_df)}개 기업 분석")
+            investable_count = len(results_df[results_df['is_investable'] == True])
+            print(f"💎 투자 가능 기업: {investable_count}개")
             print(f"📁 결과 파일 저장: results/buffett_analysis/")
             
         else:
