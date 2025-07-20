@@ -1,0 +1,63 @@
+{
+  "analysis_date": "2025-07-20",
+  "total_analyzed": 3,
+  "results": [
+    {
+      "stock_code": "035420",
+      "company_name": "NAVER",
+      "total_score": 79.0,
+      "score_percentage": 71.81818181818181,
+      "overall_grade": "B",
+      "investment_grade": "Hold",
+      "risk_level": "Medium",
+      "quality_rating": "Good",
+      "investment_thesis": "워런 버핏 기준으로 양호한 투자 대상입니다 (B등급, 79.0/110점). Hold 수준.",
+      "categories": {
+        "profitability": 23.0,
+        "growth": 15.0,
+        "stability": 19.0,
+        "efficiency": 7.0,
+        "valuation": 8.0,
+        "quality": 7.0
+      }
+    },
+    {
+      "stock_code": "005930",
+      "company_name": "삼성전자",
+      "total_score": 77.0,
+      "score_percentage": 70.0,
+      "overall_grade": "B",
+      "investment_grade": "Hold",
+      "risk_level": "Medium",
+      "quality_rating": "Good",
+      "investment_thesis": "워런 버핏 기준으로 양호한 투자 대상입니다 (B등급, 77.0/110점). Hold 수준.",
+      "categories": {
+        "profitability": 21.0,
+        "growth": 15.0,
+        "stability": 19.0,
+        "efficiency": 7.0,
+        "valuation": 8.0,
+        "quality": 7.0
+      }
+    },
+    {
+      "stock_code": "000660",
+      "company_name": "SK하이닉스",
+      "total_score": 77.0,
+      "score_percentage": 70.0,
+      "overall_grade": "B",
+      "investment_grade": "Hold",
+      "risk_level": "Medium",
+      "quality_rating": "Good",
+      "investment_thesis": "워런 버핏 기준으로 양호한 투자 대상입니다 (B등급, 77.0/110점). Hold 수준.",
+      "categories": {
+        "profitability": 21.0,
+        "growth": 15.0,
+        "stability": 19.0,
+        "efficiency": 7.0,
+        "valuation": 8.0,
+        "quality": 7.0
+      }
+    }
+  ]
+}

@@ -66,6 +66,7 @@ data/cache/
 *.db-wal
 *.db-journal
 *.txt
+*.html
 
 # 로그 파일
 logs/

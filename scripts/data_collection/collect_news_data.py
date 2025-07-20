@@ -114,33 +114,85 @@ class NewsDataCollector:
             self.logger.error(f"회사명 조회 실패 ({stock_code}): {e}")
             return None
     
-    def search_news(self, keyword, start_date=None, sort='date', display=100):
-        """네이버 뉴스 검색"""
+    def search_news_with_date_filter(self, keyword, days_back=30, max_pages=5):
+        """날짜 필터링이 적용된 뉴스 검색"""
+        from dateutil import parser as date_parser
+        
+        all_filtered_news = []
+        cutoff_date = datetime.now().date() - timedelta(days=days_back)
+        
         try:
             headers = {
                 'X-Naver-Client-Id': self.naver_client_id,
                 'X-Naver-Client-Secret': self.naver_client_secret
             }
             
-            params = {
-                'query': keyword,
-                'display': display,  # 최대 100개
-                'start': 1,
-                'sort': sort  # date: 최신순, sim: 정확도순
-            }
+            # 여러 페이지에서 최신 뉴스 수집
+            for page in range(1, max_pages + 1):
+                start_index = (page - 1) * 100 + 1
+                
+                params = {
+                    'query': keyword,
+                    'display': 100,
+                    'start': start_index,
+                    'sort': 'date'  # 최신순 정렬
+                }
+                
+                response = requests.get(self.base_url, headers=headers, params=params, timeout=30)
+                response.raise_for_status()
+                
+                data = response.json()
+                news_items = data.get('items', [])
+                
+                if not news_items:
+                    break
+                
+                # 날짜 필터링
+                filtered_items = []
+                old_news_count = 0
+                
+                for item in news_items:
+                    pub_date_str = item.get('pubDate', '')
+                    try:
+                        if pub_date_str:
+                            pub_date = date_parser.parse(pub_date_str).date()
+                            if pub_date >= cutoff_date:
+                                filtered_items.append(item)
+                            else:
+                                old_news_count += 1
+                        else:
+                            filtered_items.append(item)  # 날짜 없으면 포함
+                    except:
+                        filtered_items.append(item)  # 파싱 실패하면 포함
+                
+                all_filtered_news.extend(filtered_items)
+                self.logger.info(f"페이지 {page}: {len(filtered_items)}개 수집, {old_news_count}개 제외")
+                
+                # 오래된 뉴스가 많으면 중단
+                if old_news_count > len(filtered_items):
+                    break
+                
+                time.sleep(0.1)
             
-            response = requests.get(self.base_url, headers=headers, params=params, timeout=30)
-            response.raise_for_status()
+            # 중복 제거
+            seen_urls = set()
+            unique_news = []
+            for item in all_filtered_news:
+                url = item.get('originallink', item.get('link', ''))
+                if url and url not in seen_urls:
+                    seen_urls.add(url)
+                    unique_news.append(item)
             
-            data = response.json()
-            news_items = data.get('items', [])
-            
-            self.logger.info(f"뉴스 검색 완료 (키워드: {keyword}): {len(news_items)}건")
-            return news_items
+            self.logger.info(f"뉴스 검색 완료 (키워드: {keyword}): {len(unique_news)}건 (최근 {days_back}일)")
+            return unique_news
             
         except Exception as e:
             self.logger.error(f"뉴스 검색 실패 (키워드: {keyword}): {e}")
             return []
+    
+    def search_news(self, keyword, start_date=None, sort='date', display=100):
+        """기존 호환성을 위한 래퍼 함수"""
+        return self.search_news_with_date_filter(keyword, 30, 3)
     
     def filter_financial_news(self, news_items, company_name=None):
         """금융/펀더멘털 관련 뉴스 필터링"""
@@ -446,8 +498,8 @@ class NewsDataCollector:
             
             self.logger.info(f"뉴스 수집 시작: {company_name}({stock_code})")
             
-            # 회사명으로 뉴스 검색
-            news_items = self.search_news(company_name)
+            # 회사명으로 뉴스 검색 (날짜 필터링 적용)
+            news_items = self.search_news_with_date_filter(company_name, days)
             
             if not news_items:
                 self.logger.warning(f"검색된 뉴스가 없습니다: {company_name}")

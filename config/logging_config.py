@@ -386,6 +386,11 @@ def log_performance(logger_name: str, function_name: str,
     """성능 로그"""
     logger_manager.log_performance(logger_name, function_name, execution_time, memory_usage)
 
+def setup_logging():
+    """로깅 시스템 초기화 (호환성을 위한 함수)"""
+    # 이미 LoggingConfig()에서 자동으로 설정되므로 pass
+    pass
+
 # 데코레이터
 def log_execution_time(logger_name: str):
     """실행 시간 로깅 데코레이터"""

@@ -1,0 +1,224 @@
+{
+  "generated_at": "2025-07-19 22:51:57",
+  "total_size_mb": 488.65625,
+  "databases": {
+    "news_data.db": {
+      "name": "뉴스 데이터",
+      "exists": true,
+      "size_mb": 190.27,
+      "total_records": 217764,
+      "tables": {
+        "news_articles": {
+          "records": 217604,
+          "latest_date": "2025-07-19 13:32:56"
+        },
+        "sqlite_sequence": {
+          "records": 2,
+          "latest_date": null
+        },
+        "sentiment_scores": {
+          "records": 158,
+          "latest_date": "2025-07-19 22:30:02"
+        },
+        "market_sentiment": {
+          "records": 0,
+          "latest_date": null
+        }
+      },
+      "status": "✅ 양호",
+      "modified": "2025-07-19 22:30"
+    },
+    "stock_data.db": {
+      "name": "주가 데이터",
+      "exists": true,
+      "size_mb": 250.62,
+      "total_records": 1675967,
+      "tables": {
+        "stock_prices": {
+          "records": 1627228,
+          "latest_date": "2025-07-19 20:22:05"
+        },
+        "sqlite_sequence": {
+          "records": 5,
+          "latest_date": null
+        },
+        "company_info": {
+          "records": 3993,
+          "latest_date": "2025-07-19 20:17:37"
+        },
+        "financial_ratios": {
+          "records": 0,
+          "latest_date": null
+        },
+        "technical_indicators": {
+          "records": 0,
+          "latest_date": null
+        },
+        "investment_scores": {
+          "records": 0,
+          "latest_date": null
+        },
+        "daily_prices": {
+          "records": 1,
+          "latest_date": "2025-07-13"
+        },
+        "stock_prices_backup": {
+          "records": 42764,
+          "latest_date": "2025-07-19 12:59:23"
+        },
+        "financial_ratios_fdr": {
+          "records": 272,
+          "latest_date": "2025-07-19 12:21:06"
+        },
+        "financial_ratios_real": {
+          "records": 1704,
+          "latest_date": "2025-07-19 13:51:58"
+        }
+      },
+      "status": "✅ 양호",
+      "modified": "2025-07-19 22:51"
+    },
+    "dart_data.db": {
+      "name": "DART 재무데이터",
+      "exists": true,
+      "size_mb": 46.1,
+      "total_records": 364623,
+      "tables": {
+        "sqlite_sequence": {
+          "records": 2,
+          "latest_date": null
+        },
+        "disclosures": {
+          "records": 25584,
+          "latest_date": "2025-07-19 13:14:18"
+        },
+        "company_outlines": {
+          "records": 0,
+          "latest_date": null
+        },
+        "financial_statements_backup": {
+          "records": 0,
+          "latest_date": null
+        },
+        "financial_statements": {
+          "records": 222878,
+          "latest_date": "2025-07-19 07:42:32"
+        },
+        "corp_codes": {
+          "records": 112903,
+          "latest_date": null
+        },
+        "samsung_financial_statements": {
+          "records": 1332,
+          "latest_date": null
+        },
+        "multi_stock_financial_statements": {
+          "records": 1924,
+          "latest_date": null
+        }
+      },
+      "status": "✅ 양호",
+      "modified": "2025-07-19 17:06"
+    },
+    "buffett_scorecard.db": {
+      "name": "버핏 스코어카드",
+      "exists": true,
+      "size_mb": 1.11,
+      "total_records": 7246,
+      "tables": {
+        "buffett_scorecard": {
+          "records": 3250,
+          "latest_date": null
+        },
+        "sqlite_sequence": {
+          "records": 3,
+          "latest_date": null
+        },
+        "batch_progress": {
+          "records": 3992,
+          "latest_date": "2025-07-13 07:42:08"
+        },
+        "batch_logs": {
+          "records": 1,
+          "latest_date": null
+        }
+      },
+      "status": "✅ 양호",
+      "modified": "2025-07-13 17:06"
+    },
+    "kis_data.db": {
+      "name": "KIS API",
+      "exists": true,
+      "size_mb": 0.5,
+      "total_records": 3010,
+      "tables": {
+        "realtime_quotes": {
+          "records": 3006,
+          "latest_date": "2025-07-13 09:55:24"
+        },
+        "sqlite_sequence": {
+          "records": 2,
+          "latest_date": null
+        },
+        "account_balance": {
+          "records": 0,
+          "latest_date": null
+        },
+        "order_history": {
+          "records": 0,
+          "latest_date": null
+        },
+        "market_indicators": {
+          "records": 2,
+          "latest_date": "2025-07-12 19:53:02"
+        }
+      },
+      "status": "✅ 양호",
+      "modified": "2025-07-13 09:55"
+    },
+    "forecast_data.db": {
+      "name": "예측 데이터",
+      "exists": true,
+      "size_mb": 0.02,
+      "total_records": 62,
+      "tables": {
+        "sqlite_sequence": {
+          "records": 2,
+          "latest_date": null
+        },
+        "forecast_financials": {
+          "records": 30,
+          "latest_date": "2025-07-19 21:08:27"
+        },
+        "analyst_opinions": {
+          "records": 30,
+          "latest_date": "2025-07-19 21:08:27"
+        }
+      },
+      "status": "🟠 부족",
+      "modified": "2025-07-19 21:08"
+    },
+    "yahoo_finance_data.db": {
+      "name": "야후 파이낸스",
+      "exists": true,
+      "size_mb": 0.02,
+      "total_records": 14,
+      "tables": {
+        "sqlite_sequence": {
+          "records": 2,
+          "latest_date": null
+        },
+        "yahoo_valuation": {
+          "records": 6,
+          "latest_date": "2025-07-19 12:02:41"
+        },
+        "yahoo_estimates": {
+          "records": 6,
+          "latest_date": "2025-07-19 12:02:42"
+        }
+      },
+      "status": "🟠 부족",
+      "modified": "2025-07-19 21:02"
+    }
+  }
+}

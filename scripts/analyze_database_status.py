@@ -139,8 +139,15 @@ class SimpleDatabaseAnalyzer:
                 print(f"📈 재무제표 보유 기업: {corp_count}개")
                 
                 current_year = datetime.now().year
-                if latest_year and latest_year < current_year - 1:
-                    recommendations.append(f"{current_year-1}년, {current_year}년 재무제표 수집 필요")
+                if latest_year:
+                    try:
+                        latest_year_int = int(latest_year)
+                        if latest_year_int < current_year - 1:
+                            recommendations.append(f"{current_year-1}년, {current_year}년 재무제표 수집 필요")
+                    except (ValueError, TypeError):
+                        recommendations.append("DART 재무데이터 재수집 필요")
+                else:
+                    recommendations.append("DART 재무데이터 수집 필요")
             else:
                 recommendations.append("재무제표 데이터 수집 필요")
         
@@ -172,11 +179,31 @@ class SimpleDatabaseAnalyzer:
                 # 최신 뉴스가 7일 전보다 오래되었으면 업데이트 필요
                 if latest_date:
                     try:
-                        latest = datetime.strptime(latest_date[:10], '%Y-%m-%d')
+                        # 다양한 날짜 형식 처리
+                        if latest_date.startswith('2'):
+                            # YYYY-MM-DD 형식
+                            latest = datetime.strptime(latest_date[:10], '%Y-%m-%d')
+                        else:
+                            # 네이버 날짜 형식: Wed, 31 Oct 2018 15:46:00 +0900
+                            # 간단하게 연도만 추출
+                            import re
+                            year_match = re.search(r'(20\d{2})', latest_date)
+                            if year_match:
+                                year = int(year_match.group(1))
+                                current_year = datetime.now().year
+                                if current_year - year > 1:
+                                    recommendations.append("뉴스 데이터가 너무 오래됨 - 재수집 필요")
+                                elif current_year - year == 1:
+                                    recommendations.append("최신 뉴스 데이터 수집 필요")
+                                return recommendations
+                            else:
+                                recommendations.append("뉴스 날짜 형식 확인 필요")
+                                return recommendations
+                        
                         if (datetime.now() - latest).days > 7:
                             recommendations.append("최신 뉴스 데이터 수집 필요")
-                    except:
-                        recommendations.append("뉴스 날짜 형식 확인 필요")
+                    except Exception as e:
+                        recommendations.append(f"뉴스 날짜 형식 확인 필요 - {str(e)[:50]}")
                 else:
                     recommendations.append("뉴스 데이터 수집 필요")
             else:

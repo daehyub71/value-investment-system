@@ -450,7 +450,7 @@ def main():
     args = parser.parse_args()
     
     # 로깅 설정
-    setup_logging(level=args.log_level)
+    setup_logging()
     logger = logging.getLogger(__name__)
     
     try:
